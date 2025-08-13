@@ -1,133 +1,107 @@
 # credit-risk-prediction
 .Credit Risk Prediction Model predicts loan repayment probability using EDA, feature engineering, Random Forest, LightGBM, ROC-AUC evaluation, and explainability analysis.
-# -*- coding: utf-8 -*-
 import pandas as pd
-import numpy as np
-
-# 1. Veriyi yükle
-try:
-    df = pd.read_csv('vehicle_sensor_data.csv')  # Dosya adını kontrol edin!
-    print("Veri başarıyla yüklendi. İlk 5 satır:")
-    print(df.head())
-except FileNotFoundError:
-    print("HATA: 'vehicle_sensor_data.csv' dosyası bulunamadı!")
-    print("Lütfen dosya yolunu kontrol edin veya örnek bir veri seti oluşturun.")
-    
-    # Örnek veri oluştur (test için)
-    data = {
-        'timestamp': pd.date_range(start='2023-01-01', periods=5, freq='H'),
-        'sensor1': [0.85, 0.87, 0.88, 0.82, 0.90],
-        'sensor2': [1.2, 1.3, 1.1, 1.4, 1.0]
-    }
-    df = pd.DataFrame(data)
-    print("\nÖrnek veri oluşturuldu:")
-    print(df)
-
-    print("\nEksik veri kontrolü:")
-print(df.isnull().sum())
-
-from sklearn.ensemble import IsolationForest
-
-# Anomali tespiti
-model = IsolationForest(contamination=0.1, random_state=42)
-anomalies = model.fit_predict(df[['sensor1', 'sensor2']])
-df['anomaly'] = anomalies  # -1: Anomali, 1: Normal
-
-print("\nAnomali durumu:")
-print(df['anomaly'].value_counts())
-
-# Zaman damgası ekleme (örnek)
-df['timestamp'] = pd.date_range(start='2023-01-01', periods=5, freq='H')
-
-# Zaman serisi olarak ayarlama
-df.set_index('timestamp', inplace=True)
-print("\nZaman serisi verisi:")
-print(df)
-
+import seaborn as sns
 import matplotlib.pyplot as plt
 
-plt.figure(figsize=(10, 4))
-plt.plot(df.index, df['sensor1'], label='Sensör 1', marker='o')
-plt.plot(df.index, df['sensor2'], label='Sensör 2', marker='x')
-plt.xlabel('Zaman')
-plt.ylabel('Değer')
-plt.title('Sensör Verileri Zaman Serisi')
-plt.legend()
-plt.grid()
+# VERİYİ YÜKLE (Sütun isimleriyle birlikte)
+url = "https://archive.ics.uci.edu/ml/machine-learning-databases/statlog/german/german.data"
+columns = [
+    'existing_checking', 'duration', 'credit_history', 'purpose', 'credit_amount',
+    'savings', 'employment', 'installment_rate', 'personal_status', 'debtors',
+    'residence', 'property', 'age', 'other_plans', 'housing', 'existing_credits',
+    'job', 'dependents', 'telephone', 'foreign_worker', 'risk'  # Buradaki isim 'risk' olarak tanımlandı!
+]
+df = pd.read_csv(url, delim_whitespace=True, header=None, names=columns)
+
+# EKSİK VERİ KONTROLÜ
+print("Eksik veri kontrolü:\n", df.isnull().sum())
+
+# TARGET DAĞILIMI (Artık 'risk' sütunu var)
+df['risk'].value_counts().plot(kind='bar', color=['green', 'red'])
+plt.title("Risk Dağılımı (1: Good, 2: Bad)")
 plt.show()
 
-df.to_csv('processed_sensor_data.csv')
-print("\nVeri 'processed_sensor_data.csv' olarak kaydedildi!")
+# KORELASYON MATRİSİ
+sns.heatmap(df.corr(), annot=True)
+plt.show()
 
+# credit_analysis.py
 import pandas as pd
 import numpy as np
 
-# 1. ÖRNEK VERİ OLUŞTUR (Gerçek veriniz varsa bu adımı atlayın)
-data = {
-    'timestamp': pd.date_range(start='2023-01-01', periods=5, freq='H'),
-    'sensor1': [0.85, 0.87, 0.88, 0.82, 0.90],
-    'sensor2': [1.20, 1.30, 1.10, 1.40, 1.00]
-}
-df = pd.DataFrame(data)
-print("Örnek Veri:\n", df)
+# 1. VERİ YÜKLEME (DÜZGÜN YAZIM)
+url = "https://archive.ics.uci.edu/ml/machine-learning-databases/statlog/german/german.data"
+columns = ['existing_checking', 'duration', 'credit_history', 'purpose', 'credit_amount',
+           'savings', 'employment', 'installment_rate', 'personal_status', 'debtors',
+           'residence', 'property', 'age', 'other_plans', 'housing', 'existing_credits',
+           'job', 'dependents', 'telephone', 'foreign_worker', 'risk']
+df = pd.read_csv(url, delim_whitespace=True, header=None, names=columns)  # DİKKAT: delim_whitespace
 
-# 2. FEATURE ENGINEERING
-window_size = 3  # 3 zaman birimlik pencere
+# 2. ÖZELLİK MÜHENDİSLİĞİ
+# Gelir sütunu ekle (örnek veri)
+np.random.seed(42)
+df['income'] = np.random.randint(1000, 5000, size=len(df))
 
-for sensor in ['sensor1', 'sensor2']:
-    # Temel istatistikler
-    df[f'{sensor}_mean'] = df[sensor].rolling(window=window_size).mean()
-    df[f'{sensor}_max'] = df[sensor].rolling(window=window_size).max()
-    df[f'{sensor}_min'] = df[sensor].rolling(window=window_size).min()
-    df[f'{sensor}_std'] = df[sensor].rolling(window=window_size).std()  # DİKKAT: "_std" olmalı (nokta değil)
-    
-    # Değişim hızı (% olarak)
-    df[f'{sensor}_change_rate'] = df[sensor].pct_change() * 100
-    
-    # Mutlak değişim
-    df[f'{sensor}_diff'] = df[sensor].diff()
+# Yeni özellikler
+df['debt_to_income_ratio'] = df['credit_amount'] / df['income']
+df['age_group'] = pd.cut(df['age'], bins=[18, 30, 45, 60, 100], labels=['18-30', '31-45', '46-60', '60+'])
 
-# 3. SONUÇLARI GÖSTER
-print("\nİşlenmiş Veri:\n", df)
+# 3. ÇIKTI KONTROLÜ
+print("\nYENİ SÜTUNLAR:")
+print(df[['debt_to_income_ratio', 'age_group', 'income']].head())  # Yeni sütunları göster
+print("\nVeri boyutu:", df.shape)
+
+# random_forest_model.py
+import pandas as pd
+from sklearn.model_selection import train_test_split
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.metrics import classification_report
+
+# Veri yükleme
+url = "https://archive.ics.uci.edu/ml/machine-learning-databases/statlog/german/german.data"
+columns = [
+    'existing_checking', 'duration', 'credit_history', 'purpose', 'credit_amount',
+    'savings', 'employment', 'installment_rate', 'personal_status', 'debtors',
+    'residence', 'property', 'age', 'other_plans', 'housing', 'existing_credits',
+    'job', 'dependents', 'telephone', 'foreign_worker', 'risk'
+]
+df = pd.read_csv(url, delim_whitespace=True, header=None, names=columns)
+
+# Özellik mühendisliği
+df['risk'] = df['risk'].map({1: 0, 2: 1})  # Riskli=1, Güvenli=0
+X = pd.get_dummies(df.drop('risk', axis=1))
+y = df['risk']
+
+# Train-test split
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+
+# Model
+model = RandomForestClassifier(
+    n_estimators=100,
+    max_depth=5,
+    class_weight='balanced'
+)
+model.fit(X_train, y_train)
+
+# Sonuçlar
+print("📊 Model Performansı:\n")
+print(classification_report(y_test, model.predict(X_test)))
 
 
 import pandas as pd
-import numpy as np
+from urllib.request import urlretrieve
 
-# 1. ÖRNEK VERİ OLUŞTUR (Gerçek veriniz varsa bu adımı atlayın)
-data = {
-    'timestamp': pd.date_range(start='2023-01-01', periods=5, freq='H'),
-    'sensor1': [0.85, 0.87, 0.88, 0.82, 0.90],
-    'sensor2': [1.20, 1.30, 1.10, 1.40, 1.00]
-}
-df = pd.DataFrame(data)
-print("Örnek Veri:\n", df)
-
-# 2. FEATURE ENGINEERING
-window_size = 3  # 3 zaman birimlik pencere
-
-for sensor in ['sensor1', 'sensor2']:
-    # Temel istatistikler
-    df[f'{sensor}_mean'] = df[sensor].rolling(window=window_size).mean()
-    df[f'{sensor}_max'] = df[sensor].rolling(window=window_size).max()
-    df[f'{sensor}_min'] = df[sensor].rolling(window=window_size).min()
-    df[f'{sensor}_std'] = df[sensor].rolling(window=window_size).std()  # DİKKAT: "_std" olmalı (nokta değil)
+try:
+    # 1. DOSYAYI İNTERNETTEN ÇEK
+    url = "https://archive.ics.uci.edu/ml/machine-learning-databases/statlog/german/german.data"
+    urlretrieve(url, "german.data")  # Bulunduğunuz klasöre indirir
     
-    # Değişim hızı (% olarak)
-    df[f'{sensor}_change_rate'] = df[sensor].pct_change() * 100
+    # 2. OKU
+    df = pd.read_csv("german.data", sep='\\s+', header=None, encoding='latin-1')
+    print("✅ İNTERNETTEN OKUNDU! İlk 3 satır:")
+    print(df.head(3))
+
+except Exception as e:
+    print(f"❌ KRİTİK HATA: {str(e)}")
     
-    # Mutlak değişim
-    df[f'{sensor}_diff'] = df[sensor].diff()
-
-# 3. SONUÇLARI GÖSTER
-print("\nİşlenmiş Veri:\n", df)
-
-import numpy as np
-
-# 1. Örnek arıza bayrağı oluştur (sensor1 > 0.88 ise arıza kabul edelim)
-df['failure_flag'] = np.where(df['sensor1'] > 0.88, 1, 0)
-
-# 2. TTF hesapla (arıza öncesi kalan adım sayısı)
-df['TTF'] = df[::-1]['failure_flag'].cumsum()[::-1]  # Ters çevirip cumulative sum al
-
-print(df[['timestamp', 'sensor1', 'failure_flag', 'TTF']])
